@@ -28,8 +28,9 @@ export function CopyText({ text, children, className, copiedLabel = "Copied!" }:
         textarea.style.left = "-9999px";
         document.body.appendChild(textarea);
         textarea.select();
-        document.execCommand("copy");
+        const success = document.execCommand("copy");
         document.body.removeChild(textarea);
+        if (!success) throw new Error("execCommand copy failed");
       }
       setLabel(copiedLabel);
     } catch {
