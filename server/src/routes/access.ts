@@ -2469,7 +2469,15 @@ export function accessRoutes(
     }
 
     const companyBranding = await getInviteCompanyBranding(invite.companyId, token);
-    res.json(toInviteSummaryResponse(req, token, invite, companyBranding));
+    const inviterName = invite.invitedByUserId
+      ? await loadUsersById(db, [invite.invitedByUserId]).then(
+          (m) => m.get(invite.invitedByUserId!)?.name ?? null
+        )
+      : null;
+    res.json({
+      ...toInviteSummaryResponse(req, token, invite, companyBranding),
+      invitedByUserName: inviterName,
+    });
   });
 
   router.get("/invites/:token/logo", async (req, res, next) => {

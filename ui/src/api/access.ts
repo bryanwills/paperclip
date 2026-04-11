@@ -20,6 +20,7 @@ type InviteSummary = {
   skillIndexPath?: string;
   skillIndexUrl?: string;
   inviteMessage?: string | null;
+  invitedByUserName?: string | null;
 };
 
 type AcceptInviteInput =

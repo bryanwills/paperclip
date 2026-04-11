@@ -4,9 +4,10 @@ import { AGENT_ADAPTER_TYPES } from "@paperclipai/shared";
 import type { AgentAdapterType, JoinRequest } from "@paperclipai/shared";
 import { Button } from "@/components/ui/button";
 import { CompanyPatternIcon } from "@/components/CompanyPatternIcon";
-import { Link, useParams } from "@/lib/router";
+import { Link, useNavigate, useParams } from "@/lib/router";
 import { accessApi } from "../api/access";
 import { authApi } from "../api/auth";
+import { companiesApi } from "../api/companies";
 import { healthApi } from "../api/health";
 import { getAdapterLabel } from "../adapters/adapter-display-registry";
 import { clearPendingInviteToken, rememberPendingInviteToken } from "../lib/invite-memory";
@@ -38,6 +39,7 @@ const fieldClassName =
 
 export function InviteLandingPage() {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const params = useParams();
   const token = (params.token ?? "").trim();
   const [authMode, setAuthMode] = useState<AuthMode>("sign_in");
@@ -68,15 +70,34 @@ export function InviteLandingPage() {
     retry: false,
   });
 
+  const companiesQuery = useQuery({
+    queryKey: queryKeys.companies.all,
+    queryFn: () => companiesApi.list(),
+    enabled: !!sessionQuery.data && !!inviteQuery.data?.companyId,
+    retry: false,
+  });
+
   useEffect(() => {
     if (token) rememberPendingInviteToken(token);
   }, [token]);
+
+  useEffect(() => {
+    if (!companiesQuery.data || !inviteQuery.data?.companyId) return;
+    const isMember = companiesQuery.data.some(
+      (c) => c.id === inviteQuery.data!.companyId
+    );
+    if (isMember) {
+      clearPendingInviteToken(token);
+      navigate("/", { replace: true });
+    }
+  }, [companiesQuery.data, inviteQuery.data, token, navigate]);
 
   const invite = inviteQuery.data;
   const companyName = invite?.companyName?.trim() || null;
   const companyDisplayName = companyName || "this Paperclip company";
   const companyLogoUrl = invite?.companyLogoUrl?.trim() || null;
   const companyBrandColor = invite?.companyBrandColor?.trim() || null;
+  const invitedByUserName = invite?.invitedByUserName?.trim() || null;
   const requiresHumanAccount =
     healthQuery.data?.deploymentMode === "authenticated" &&
     !sessionQuery.data &&
@@ -195,14 +216,50 @@ export function InviteLandingPage() {
     const claimApiKeyPath = typeof payload.claimApiKeyPath === "string" ? payload.claimApiKeyPath : null;
     const onboardingTextUrl = readNestedString(payload.onboarding, ["textInstructions", "url"]);
     const joinedNow = !showsAgentForm && payload.status === "approved";
+    const approvalUrl = `${window.location.origin}/company/settings/access`;
 
     return (
       <div className="min-h-screen bg-zinc-950 px-6 py-12 text-zinc-100">
         <div className="mx-auto max-w-md border border-zinc-800 bg-zinc-950 p-6">
-          <h1 className="text-lg font-semibold">{joinedNow ? "You joined the company" : "Request submitted"}</h1>
-          <div className="mt-4 text-sm text-zinc-400">
-            Request ID: <span className="font-mono text-zinc-200">{payload.id}</span>
+          <div className="flex items-center gap-3">
+            <CompanyPatternIcon
+              companyName={companyDisplayName}
+              logoUrl={companyLogoUrl}
+              brandColor={companyBrandColor}
+              className="h-12 w-12 border border-zinc-800 rounded-none"
+            />
+            <h1 className="text-lg font-semibold">
+              {joinedNow ? "You joined the company" : "Request submitted"}
+            </h1>
           </div>
+          {joinedNow ? (
+            <div className="mt-4">
+              <Button asChild className="w-full rounded-none">
+                <Link to="/">Open board</Link>
+              </Button>
+            </div>
+          ) : (
+            <div className="mt-4 space-y-3">
+              <p className="text-sm text-zinc-400">
+                {invitedByUserName
+                  ? `${invitedByUserName} must approve your request to join.`
+                  : "Your request is pending approval."}
+                {" "}Ask them to visit the link below to approve it.
+              </p>
+              <div className="border border-zinc-800 p-3">
+                <p className="text-xs text-zinc-500 mb-1">Approval page</p>
+                <a
+                  href={approvalUrl}
+                  className="text-sm text-zinc-200 font-mono break-all underline underline-offset-2 hover:text-zinc-100"
+                >
+                  {approvalUrl}
+                </a>
+              </div>
+              <p className="text-xs text-zinc-500">
+                Refresh this page after you've been approved — you'll be redirected automatically.
+              </p>
+            </div>
+          )}
           {claimSecret && claimApiKeyPath ? (
             <div className="mt-4 space-y-1 border border-zinc-800 p-3 text-xs text-zinc-400">
               <div className="text-zinc-200">Claim secret</div>
@@ -213,13 +270,6 @@ export function InviteLandingPage() {
           {onboardingTextUrl ? (
             <div className="mt-4 text-xs text-zinc-400">
               Onboarding: <span className="font-mono break-all">{onboardingTextUrl}</span>
-            </div>
-          ) : null}
-          {joinedNow ? (
-            <div className="mt-4">
-              <Button asChild className="rounded-none">
-                <Link to="/">Open board</Link>
-              </Button>
             </div>
           ) : null}
         </div>
