@@ -8,6 +8,9 @@ import {
   useRef,
   useState,
   type DragEvent,
+  type MouseEvent as ReactMouseEvent,
+  type PointerEvent as ReactPointerEvent,
+  type TouchEvent as ReactTouchEvent,
 } from "react";
 import { createPortal } from "react-dom";
 import {
@@ -443,6 +446,7 @@ export const MarkdownEditor = forwardRef<MarkdownEditorRef, MarkdownEditorProps>
   const mentionStateRef = useRef<MentionState | null>(null);
   const [mentionIndex, setMentionIndex] = useState(0);
   const skillEnterArmedRef = useRef(false);
+  const autocompleteSelectionHandledRef = useRef(false);
   const mentionActive = mentionState !== null && (
     (mentionState.trigger === "mention" && Boolean(mentions?.length))
     || (mentionState.trigger === "skill" && slashCommands.length > 0)
@@ -677,6 +681,11 @@ export const MarkdownEditor = forwardRef<MarkdownEditorRef, MarkdownEditorProps>
   }, [checkMention, mentionActive]);
 
   useEffect(() => {
+    if (mentionActive) return;
+    autocompleteSelectionHandledRef.current = false;
+  }, [mentionActive]);
+
+  useEffect(() => {
     const editable = containerRef.current?.querySelector('[contenteditable="true"]');
     if (!editable) return;
     decorateProjectMentions();
@@ -696,7 +705,7 @@ export const MarkdownEditor = forwardRef<MarkdownEditorRef, MarkdownEditorProps>
       // Read from ref to avoid stale-closure issues (selectionchange can
       // update state between the last render and this callback firing).
       const state = mentionStateRef.current;
-      if (!state) return;
+      if (!state) return false;
       const current = latestValueRef.current;
       const next = applyMention(current, state, option);
       if (next !== current) {
@@ -729,9 +738,23 @@ export const MarkdownEditor = forwardRef<MarkdownEditorRef, MarkdownEditorProps>
       mentionStateRef.current = null;
       skillEnterArmedRef.current = false;
       setMentionState(null);
+      return true;
     },
     [decorateProjectMentions, onChange],
   );
+
+  const handleAutocompletePress = useCallback((
+    event: ReactMouseEvent<HTMLButtonElement> | ReactPointerEvent<HTMLButtonElement> | ReactTouchEvent<HTMLButtonElement>,
+    option: AutocompleteOption,
+  ) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (autocompleteSelectionHandledRef.current) return;
+    const handled = selectMention(option);
+    if (handled) {
+      autocompleteSelectionHandledRef.current = true;
+    }
+  }, [selectMention]);
 
   function hasFilePayload(evt: DragEvent<HTMLDivElement>) {
     return Array.from(evt.dataTransfer?.types ?? []).includes("Files");
@@ -917,10 +940,9 @@ export const MarkdownEditor = forwardRef<MarkdownEditorRef, MarkdownEditorProps>
                   "flex items-center gap-2 w-full px-3 py-1.5 text-sm text-left hover:bg-accent/50 transition-colors",
                   i === mentionIndex && "bg-accent",
                 )}
-                onPointerDown={(e) => {
-                  e.preventDefault(); // prevent blur
-                  selectMention(option);
-                }}
+                onPointerDown={(e) => handleAutocompletePress(e, option)}
+                onMouseDown={(e) => handleAutocompletePress(e, option)}
+                onTouchStart={(e) => handleAutocompletePress(e, option)}
                 onMouseEnter={() => {
                   if (mentionStateRef.current?.trigger === "skill") {
                     skillEnterArmedRef.current = true;

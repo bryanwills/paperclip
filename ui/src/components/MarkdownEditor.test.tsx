@@ -3,7 +3,7 @@
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { buildSkillMentionHref } from "@paperclipai/shared";
+import { buildProjectMentionHref, buildSkillMentionHref } from "@paperclipai/shared";
 import {
   computeMentionMenuPosition,
   findClosestAutocompleteAnchor,
@@ -36,17 +36,20 @@ vi.mock("@mdxeditor/editor", async () => {
       markdown,
       placeholder,
       onChange,
+      className,
     }: {
       markdown: string;
       placeholder?: string;
       onChange?: (value: string) => void;
+      className?: string;
     },
     forwardedRef: React.ForwardedRef<{ setMarkdown: (value: string) => void; focus: () => void } | null>,
   ) {
     const [content, setContent] = React.useState(markdown);
+    const editableRef = React.useRef<HTMLDivElement>(null);
     const handle = React.useMemo(() => ({
       setMarkdown: (value: string) => setContent(value),
-      focus: () => {},
+      focus: () => editableRef.current?.focus(),
     }), []);
 
     React.useEffect(() => {
@@ -64,7 +67,17 @@ vi.mock("@mdxeditor/editor", async () => {
       };
     }, []);
 
-    return <div data-testid="mdx-editor">{content || placeholder || ""}</div>;
+    return (
+      <div
+        ref={editableRef}
+        data-testid="mdx-editor"
+        className={className}
+        contentEditable
+        suppressContentEditableWarning
+      >
+        {content || placeholder || ""}
+      </div>
+    );
   });
 
   return {
@@ -105,14 +118,28 @@ async function flush() {
 
 describe("MarkdownEditor", () => {
   let container: HTMLDivElement;
+  let originalRangeRect: typeof Range.prototype.getBoundingClientRect;
 
   beforeEach(() => {
     container = document.createElement("div");
     document.body.appendChild(container);
+    originalRangeRect = Range.prototype.getBoundingClientRect;
+    Range.prototype.getBoundingClientRect = () => ({
+      x: 32,
+      y: 24,
+      width: 12,
+      height: 18,
+      top: 24,
+      right: 44,
+      bottom: 42,
+      left: 32,
+      toJSON: () => ({}),
+    });
   });
 
   afterEach(() => {
     container.remove();
+    Range.prototype.getBoundingClientRect = originalRangeRect;
     vi.clearAllMocks();
     mdxEditorMockState.emitMountEmptyReset = false;
   });
@@ -311,5 +338,65 @@ describe("MarkdownEditor", () => {
     expect(selection?.anchorOffset).toBe(1);
 
     editable.remove();
+  });
+
+  it("accepts mention selection from touchstart taps", async () => {
+    const handleChange = vi.fn();
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(
+        <MarkdownEditor
+          value="@Pap"
+          onChange={handleChange}
+          mentions={[
+            {
+              id: "project:project-123",
+              kind: "project",
+              name: "Paperclip App",
+              projectId: "project-123",
+              projectColor: "#336699",
+            },
+          ]}
+        />,
+      );
+    });
+
+    await flush();
+
+    const editable = container.querySelector('[contenteditable="true"]');
+    expect(editable).not.toBeNull();
+
+    const textNode = editable?.firstChild;
+    expect(textNode?.nodeType).toBe(Node.TEXT_NODE);
+
+    const selection = window.getSelection();
+    const range = document.createRange();
+    range.setStart(textNode!, "@Pap".length);
+    range.collapse(true);
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+
+    act(() => {
+      document.dispatchEvent(new Event("selectionchange"));
+    });
+
+    await flush();
+
+    const option = Array.from(document.body.querySelectorAll('button[type="button"]'))
+      .find((node) => node.textContent?.includes("Paperclip App"));
+    expect(option).toBeTruthy();
+
+    act(() => {
+      option?.dispatchEvent(new Event("touchstart", { bubbles: true, cancelable: true }));
+    });
+
+    expect(handleChange).toHaveBeenCalledWith(
+      `[@Paperclip App](${buildProjectMentionHref("project-123", "#336699")}) `,
+    );
+
+    await act(async () => {
+      root.unmount();
+    });
   });
 });
