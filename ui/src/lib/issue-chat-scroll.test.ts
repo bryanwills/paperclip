@@ -72,12 +72,12 @@ describe("issue-chat-scroll", () => {
     mainContent.remove();
   });
 
-  it("preserves the composer viewport when the composer is visible", () => {
+  it("does not preserve the composer viewport just because the composer is visible", () => {
     const composer = document.createElement("div");
     document.body.appendChild(composer);
     mockTop(composer, 540);
 
-    expect(shouldPreserveComposerViewport(composer)).toBe(true);
+    expect(shouldPreserveComposerViewport(composer)).toBe(false);
 
     composer.remove();
   });

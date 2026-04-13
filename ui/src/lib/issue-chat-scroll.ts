@@ -46,10 +46,7 @@ export function shouldPreserveComposerViewport(
   if (activeElement instanceof Node && composerElement.contains(activeElement)) {
     return true;
   }
-
-  const viewportHeight = doc.defaultView?.innerHeight ?? window.innerHeight;
-  const rect = composerElement.getBoundingClientRect();
-  return rect.bottom > 0 && rect.top < viewportHeight;
+  return false;
 }
 
 export function restoreComposerViewportSnapshot(
