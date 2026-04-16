@@ -275,7 +275,11 @@ function authorNameForComment(
   if (comment.authorAgentId) {
     return agentMap?.get(comment.authorAgentId)?.name ?? comment.authorAgentId.slice(0, 8);
   }
-  return formatAssigneeUserLabel(comment.authorUserId ?? null, currentUserId, userLabelMap) ?? "You";
+  const authorUserId = comment.authorUserId ?? null;
+  if (!authorUserId) return "You";
+  const userLabel = userLabelMap?.get(authorUserId)?.trim();
+  if (userLabel) return userLabel;
+  return formatAssigneeUserLabel(authorUserId, currentUserId, userLabelMap) ?? "You";
 }
 
 function formatStatusLabel(status: string) {

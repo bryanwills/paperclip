@@ -504,6 +504,7 @@ type IssueDetailChatTabProps = {
   agentMap: Map<string, Agent>;
   currentUserId: string | null;
   userLabelMap: ReadonlyMap<string, string> | null;
+  userProfileMap: ReadonlyMap<string, import("../lib/company-members").CompanyUserProfile> | null;
   draftKey: string;
   reassignOptions: Array<{ id: string; label: string; searchText?: string }>;
   currentAssigneeValue: string;
@@ -538,6 +539,7 @@ function IssueDetailChatTab({
   agentMap,
   currentUserId,
   userLabelMap,
+  userProfileMap,
   draftKey,
   reassignOptions,
   currentAssigneeValue,
@@ -685,6 +687,7 @@ function IssueDetailChatTab({
         agentMap={agentMap}
         currentUserId={currentUserId}
         userLabelMap={userLabelMap}
+        userProfileMap={userProfileMap}
         draftKey={draftKey}
         enableReassign
         reassignOptions={reassignOptions}
@@ -2583,6 +2586,7 @@ export function IssueDetail() {
               agentMap={agentMap}
               currentUserId={currentUserId}
               userLabelMap={userLabelMap}
+              userProfileMap={userProfileMap}
               draftKey={`paperclip:issue-comment-draft:${issue.id}`}
               reassignOptions={commentReassignOptions}
               currentAssigneeValue={actualAssigneeValue}
