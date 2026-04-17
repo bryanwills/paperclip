@@ -8,6 +8,7 @@ import { agentService } from "../services/agents.js";
 import { logActivity } from "../services/activity-log.js";
 import { issueService } from "../services/issues.js";
 import { missionInitializationService } from "../services/mission-initialization.js";
+import { missionSummaryService } from "../services/mission-summary.js";
 import { assertCompanyAccess, getActorInfo } from "./authz.js";
 
 const initMissionSchema = z.object({}).strict();
@@ -22,6 +23,7 @@ export function missionRoutes(db: Db) {
   const router = Router();
   const issuesSvc = issueService(db);
   const missions = missionInitializationService(db);
+  const missionSummaries = missionSummaryService(db);
   const access = accessService(db);
   const agents = agentService(db);
 
@@ -103,6 +105,18 @@ export function missionRoutes(db: Db) {
     }
 
     res.status(result.createdDocumentKeys.length > 0 || result.metadataUpdated ? 201 : 200).json(result);
+  });
+
+  router.get("/issues/:id/mission-summary", async (req, res) => {
+    const id = req.params.id as string;
+    const issue = await issuesSvc.getById(id);
+    if (!issue) {
+      res.status(404).json({ error: "Issue not found" });
+      return;
+    }
+    assertCompanyAccess(req, issue.companyId);
+    const summary = await missionSummaries.getSummary(issue.id);
+    res.json(summary);
   });
 
   return router;

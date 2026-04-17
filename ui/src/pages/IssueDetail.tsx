@@ -58,6 +58,7 @@ import { ApprovalCard } from "../components/ApprovalCard";
 import { InlineEditor } from "../components/InlineEditor";
 import { IssueChatThread, type IssueChatComposerHandle } from "../components/IssueChatThread";
 import { IssueDocumentsSection } from "../components/IssueDocumentsSection";
+import { MissionSummaryPanel } from "../components/MissionSummaryPanel";
 import { IssuesList } from "../components/IssuesList";
 import { IssueProperties } from "../components/IssueProperties";
 import { IssueWorkspaceCard } from "../components/IssueWorkspaceCard";
@@ -898,6 +899,17 @@ export function IssueDetail() {
     enabled: !!issueId,
   });
   const resolvedCompanyId = issue?.companyId ?? selectedCompanyId;
+  const isMissionIssue = issue?.originKind === "mission";
+  const {
+    data: missionSummary,
+    isLoading: missionSummaryLoading,
+    error: missionSummaryError,
+  } = useQuery({
+    queryKey: issue?.id ? queryKeys.issues.missionSummary(issue.id) : ["issues", "mission-summary", "pending"],
+    queryFn: () => issuesApi.getMissionSummary(issue!.id),
+    enabled: !!issue?.id && isMissionIssue,
+    retry: false,
+  });
   const commentComposerDisabledReason = useMemo(() => {
     if (!issue?.currentExecutionWorkspace || !isClosedIsolatedExecutionWorkspace(issue.currentExecutionWorkspace)) {
       return null;
@@ -2393,6 +2405,14 @@ export function IssueDetail() {
         itemClassName="rounded-lg border border-border p-3"
         missingBehavior="placeholder"
       />
+
+      {isMissionIssue && (
+        <MissionSummaryPanel
+          summary={missionSummary}
+          isLoading={missionSummaryLoading}
+          error={missionSummaryError instanceof Error ? missionSummaryError : null}
+        />
+      )}
 
       {showRichSubIssuesSection ? (
         <div className="space-y-3">

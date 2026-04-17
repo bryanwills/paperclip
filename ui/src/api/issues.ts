@@ -6,6 +6,7 @@ import type {
   FeedbackVote,
   Issue,
   IssueAttachment,
+  IssueBackedMissionSummary,
   IssueComment,
   IssueDocument,
   IssueLabel,
@@ -131,6 +132,7 @@ export const issuesApi = {
   cancelComment: (id: string, commentId: string) =>
     api.delete<IssueComment>(`/issues/${id}/comments/${commentId}`),
   listDocuments: (id: string) => api.get<IssueDocument[]>(`/issues/${id}/documents`),
+  getMissionSummary: (id: string) => api.get<IssueBackedMissionSummary>(`/issues/${id}/mission-summary`),
   getDocument: (id: string, key: string) => api.get<IssueDocument>(`/issues/${id}/documents/${encodeURIComponent(key)}`),
   upsertDocument: (id: string, key: string, data: UpsertIssueDocument) =>
     api.put<IssueDocument>(`/issues/${id}/documents/${encodeURIComponent(key)}`, data),

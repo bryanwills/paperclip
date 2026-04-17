@@ -406,6 +406,13 @@ export type {
   MissionFinding,
   MissionValidationReport,
   IssueBackedMissionSummary,
+  MissionDocumentChecklistItem,
+  MissionDocumentError,
+  MissionSummaryIssue,
+  MissionMilestoneProjection,
+  MissionBlockedWorkItem,
+  MissionRunSummary,
+  MissionCostSummary,
 } from "./types/index.js";
 
 export {

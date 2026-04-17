@@ -1,13 +1,18 @@
 import type {
+  IssueOriginKind,
+  IssuePriority,
+  IssueStatus,
   MissionFeatureKind,
   MissionFeatureStatus,
   MissionFindingSeverity,
   MissionFindingStatus,
+  MissionRequiredDocumentKey,
   MissionRoleType,
   MissionState,
   MissionValidationAssertionStatus,
   MissionValidationTooling,
 } from "../constants.js";
+import type { IssueRelationIssueSummary } from "./issue.js";
 
 export interface MissionEvidenceRequirement {
   kind: string;
@@ -77,9 +82,74 @@ export interface MissionValidationReport {
 }
 
 export interface IssueBackedMissionSummary {
+  missionIssueId: string;
+  missionIdentifier: string | null;
   state: MissionState;
-  missing_required_document_keys: string[];
+  documentChecklist: MissionDocumentChecklistItem[];
+  missing_required_document_keys: MissionRequiredDocumentKey[];
+  documentErrors: MissionDocumentError[];
+  milestones: MissionMilestoneProjection[];
+  blockers: MissionBlockedWorkItem[];
+  activeWork: MissionSummaryIssue[];
+  runSummary: MissionRunSummary;
+  costSummary: MissionCostSummary;
   next_action: string;
+}
+
+export interface MissionDocumentChecklistItem {
+  key: MissionRequiredDocumentKey;
+  title: string | null;
+  present: boolean;
+  latestRevisionNumber: number | null;
+  updatedAt: Date | null;
+}
+
+export interface MissionDocumentError {
+  key: string;
+  message: string;
+}
+
+export interface MissionSummaryIssue {
+  id: string;
+  identifier: string | null;
+  title: string;
+  status: IssueStatus;
+  priority: IssuePriority;
+  originKind: IssueOriginKind;
+  originId: string | null;
+  assigneeAgentId: string | null;
+  assigneeUserId: string | null;
+  executionRunId: string | null;
+  blockedBy: IssueRelationIssueSummary[];
+}
+
+export interface MissionMilestoneProjection {
+  key: string;
+  title: string;
+  summary: string | null;
+  issue: MissionSummaryIssue | null;
+  features: MissionSummaryIssue[];
+  validations: MissionSummaryIssue[];
+  fixLoops: MissionSummaryIssue[];
+  blockers: MissionBlockedWorkItem[];
+}
+
+export interface MissionBlockedWorkItem {
+  issue: MissionSummaryIssue;
+  blockers: IssueRelationIssueSummary[];
+}
+
+export interface MissionRunSummary {
+  total: number;
+  active: number;
+  latestRunId: string | null;
+  latestRunStatus: string | null;
+}
+
+export interface MissionCostSummary {
+  costCents: number;
+  inputTokens: number;
+  outputTokens: number;
 }
 
 export type MissionGeneratedIssueKind = "milestone" | "feature" | "validation" | "fix_loop";
