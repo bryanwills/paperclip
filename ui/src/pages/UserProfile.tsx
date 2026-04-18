@@ -1,30 +1,25 @@
 import { useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import {
-  Activity,
-  AlertCircle,
-  BarChart3,
-  CheckCircle2,
-  Clock3,
-  Coins,
-  Hash,
-  MessageSquareText,
-  Ticket,
-  UserRound,
-} from "lucide-react";
-import type { LucideIcon } from "lucide-react";
+import { AlertCircle, UserRound } from "lucide-react";
 import type { UserProfileDailyPoint, UserProfileWindowStats } from "@paperclipai/shared";
 import { Link, useParams } from "@/lib/router";
 import { userProfilesApi } from "../api/userProfiles";
 import { Avatar, AvatarFallback, AvatarImage } from "../components/ui/avatar";
-import { Badge } from "../components/ui/badge";
 import { EmptyState } from "../components/EmptyState";
 import { PageSkeleton } from "../components/PageSkeleton";
 import { StatusBadge } from "../components/StatusBadge";
 import { useBreadcrumbs } from "../context/BreadcrumbContext";
 import { useCompany } from "../context/CompanyContext";
 import { queryKeys } from "../lib/queryKeys";
-import { cn, formatCents, formatDate, formatShortDate, formatTokens, issueUrl, providerDisplayName, relativeTime } from "../lib/utils";
+import {
+  formatCents,
+  formatDate,
+  formatShortDate,
+  formatTokens,
+  issueUrl,
+  providerDisplayName,
+  relativeTime,
+} from "../lib/utils";
 
 const NO_COMPANY = "__none__";
 
@@ -44,107 +39,121 @@ function completionRate(stats: UserProfileWindowStats) {
   return `${Math.round((stats.completedIssues / stats.touchedIssues) * 100)}%`;
 }
 
-function StatPill({
-  icon: Icon,
-  label,
-  value,
-  tone = "default",
-}: {
-  icon: LucideIcon;
-  label: string;
-  value: string;
-  tone?: "default" | "green" | "amber" | "blue";
-}) {
+function HeroStat({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
-    <div
-      className={cn(
-        "min-w-0 border border-border bg-background p-3",
-        tone === "green" && "border-emerald-500/30 bg-emerald-500/5",
-        tone === "amber" && "border-amber-500/30 bg-amber-500/5",
-        tone === "blue" && "border-sky-500/30 bg-sky-500/5",
-      )}
-    >
-      <div className="flex items-center gap-2 text-[11px] font-medium uppercase text-muted-foreground">
-        <Icon className="size-3.5 shrink-0" />
-        <span className="truncate">{label}</span>
-      </div>
-      <div className="mt-2 truncate text-xl font-semibold tabular-nums">{value}</div>
+    <div className="min-w-0">
+      <div className="text-2xl font-semibold tabular-nums sm:text-3xl">{value}</div>
+      <div className="mt-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{label}</div>
+      {hint ? <div className="mt-0.5 text-xs text-muted-foreground/70">{hint}</div> : null}
     </div>
   );
 }
 
-function WindowPanel({ stats }: { stats: UserProfileWindowStats }) {
+function WindowColumn({ stats }: { stats: UserProfileWindowStats }) {
+  const tokens = totalTokens(stats);
   return (
-    <div className="border border-border bg-card p-4">
-      <div className="flex items-center justify-between gap-3">
-        <h2 className="text-sm font-semibold">{stats.label}</h2>
-        <Badge variant="outline" className="font-mono">{formatTokens(totalTokens(stats))}</Badge>
+    <div className="flex min-w-0 flex-col gap-4 border-l border-border pl-5 first:border-l-0 first:pl-0">
+      <div className="flex items-baseline justify-between gap-3">
+        <h2 className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{stats.label}</h2>
+        <span className="text-[11px] text-muted-foreground tabular-nums">{completionRate(stats)} done</span>
       </div>
-      <div className="mt-4 grid grid-cols-2 gap-2">
-        <StatPill icon={Ticket} label="Touched" value={String(stats.touchedIssues)} />
-        <StatPill icon={CheckCircle2} label="Done" value={String(stats.completedIssues)} tone="green" />
-        <StatPill icon={MessageSquareText} label="Comments" value={String(stats.commentCount)} tone="blue" />
-        <StatPill icon={Coins} label="Spend" value={formatCents(stats.costCents)} tone="amber" />
+
+      <div className="grid grid-cols-2 gap-x-5 gap-y-3">
+        <Metric value={String(stats.touchedIssues)} label="Touched" />
+        <Metric value={String(stats.completedIssues)} label="Completed" />
+        <Metric value={String(stats.commentCount)} label="Comments" />
+        <Metric value={String(stats.activityCount)} label="Actions" />
       </div>
-      <div className="mt-4 grid grid-cols-3 divide-x divide-border border border-border text-center">
-        <div className="p-2">
-          <div className="text-xs text-muted-foreground">Created</div>
-          <div className="text-sm font-semibold tabular-nums">{stats.createdIssues}</div>
-        </div>
-        <div className="p-2">
-          <div className="text-xs text-muted-foreground">Open</div>
-          <div className="text-sm font-semibold tabular-nums">{stats.assignedOpenIssues}</div>
-        </div>
-        <div className="p-2">
-          <div className="text-xs text-muted-foreground">Rate</div>
-          <div className="text-sm font-semibold tabular-nums">{completionRate(stats)}</div>
-        </div>
+
+      <div className="grid grid-cols-2 gap-x-5 gap-y-1.5 pt-3 text-xs tabular-nums text-muted-foreground">
+        <span>Tokens</span>
+        <span className="text-right text-foreground">{formatTokens(tokens)}</span>
+        <span>Spend</span>
+        <span className="text-right text-foreground">{formatCents(stats.costCents)}</span>
+        <span>Created</span>
+        <span className="text-right text-foreground">{stats.createdIssues}</span>
+        <span>Open</span>
+        <span className="text-right text-foreground">{stats.assignedOpenIssues}</span>
       </div>
+    </div>
+  );
+}
+
+function Metric({ value, label }: { value: string; label: string }) {
+  return (
+    <div className="min-w-0">
+      <div className="truncate text-xl font-semibold tabular-nums">{value}</div>
+      <div className="mt-0.5 text-[11px] text-muted-foreground">{label}</div>
     </div>
   );
 }
 
 function UsageChart({ points }: { points: UserProfileDailyPoint[] }) {
-  const maxTokens = Math.max(1, ...points.map((point) => totalTokens(point)));
-  const maxActivity = Math.max(1, ...points.map((point) => point.activityCount + point.completedIssues));
+  const totals = points.map((point) => totalTokens(point));
+  const maxTokens = Math.max(1, ...totals);
+  const maxCompleted = Math.max(1, ...points.map((point) => point.completedIssues));
+  const totalTokensSum = totals.reduce((sum, value) => sum + value, 0);
 
   return (
-    <section className="border border-border bg-card p-5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 className="text-base font-semibold">Two-week signal</h2>
-          <p className="text-sm text-muted-foreground">Token pressure, user actions, and completed work by day.</p>
-        </div>
-        <div className="flex items-center gap-3 text-xs text-muted-foreground">
-          <span className="inline-flex items-center gap-1.5"><span className="size-2 bg-sky-500" /> tokens</span>
-          <span className="inline-flex items-center gap-1.5"><span className="size-2 bg-emerald-500" /> activity</span>
+    <section>
+      <div className="flex flex-wrap items-baseline justify-between gap-3 border-b border-border pb-3">
+        <h2 className="text-sm font-semibold">Last 14 days</h2>
+        <div className="flex items-baseline gap-4 text-xs text-muted-foreground">
+          <span className="tabular-nums text-foreground">{formatTokens(totalTokensSum)}</span>
+          <span>tokens total</span>
         </div>
       </div>
-      <div className="mt-6 grid h-44 grid-cols-[repeat(14,minmax(0,1fr))] items-end gap-1 sm:gap-2">
+      <div className="mt-6 grid grid-cols-[repeat(14,minmax(0,1fr))] items-end gap-1.5 sm:gap-2">
         {points.map((point) => {
-          const tokenHeight = Math.max(6, Math.round((totalTokens(point) / maxTokens) * 100));
-          const activityHeight = Math.max(4, Math.round(((point.activityCount + point.completedIssues) / maxActivity) * 72));
+          const tokens = totalTokens(point);
+          const heightPct = tokens === 0 ? 0 : Math.max(2, Math.round((tokens / maxTokens) * 100));
+          const completedPct = point.completedIssues === 0
+            ? 0
+            : Math.max(8, Math.round((point.completedIssues / maxCompleted) * 36));
           return (
-            <div key={point.date} className="group flex h-full min-w-0 flex-col justify-end gap-1">
-              <div className="flex h-full items-end justify-center gap-1">
+            <div key={point.date} className="group flex h-36 flex-col justify-end">
+              <div
+                className="w-full bg-foreground/80 transition-opacity group-hover:bg-foreground"
+                style={{ height: `${heightPct}%`, minHeight: tokens === 0 ? 1 : undefined }}
+                title={`${formatShortDate(point.date)}: ${formatTokens(tokens)} tokens, ${point.completedIssues} completed`}
+              />
+              {completedPct > 0 ? (
                 <div
-                  className="w-full max-w-5 border border-sky-500/40 bg-sky-500/20 transition-colors group-hover:bg-sky-500/35"
-                  style={{ height: `${tokenHeight}%` }}
-                  title={`${formatShortDate(point.date)}: ${formatTokens(totalTokens(point))} tokens`}
+                  className="mt-1 w-full rounded-full bg-emerald-500/80"
+                  style={{ height: 2, opacity: Math.min(1, 0.35 + completedPct / 100) }}
                 />
-                <div
-                  className="w-full max-w-3 border border-emerald-500/40 bg-emerald-500/25 transition-colors group-hover:bg-emerald-500/40"
-                  style={{ height: `${activityHeight}%` }}
-                  title={`${formatShortDate(point.date)}: ${point.activityCount} actions, ${point.completedIssues} completed`}
-                />
-              </div>
-              <div className="truncate text-center text-[10px] text-muted-foreground">{new Date(point.date).getUTCDate()}</div>
+              ) : null}
             </div>
           );
         })}
       </div>
+      <div className="mt-2 grid grid-cols-[repeat(14,minmax(0,1fr))] gap-1.5 text-[10px] tabular-nums text-muted-foreground sm:gap-2">
+        {points.map((point, index) => (
+          <div key={point.date} className="text-center">
+            {index === 0 || index === 6 || index === 13 ? formatShortDate(point.date) : null}
+          </div>
+        ))}
+      </div>
+      <div className="mt-4 flex flex-wrap items-center gap-4 text-[10px] uppercase tracking-wide text-muted-foreground">
+        <span className="inline-flex items-center gap-1.5">
+          <span className="h-2 w-2 bg-foreground/80" /> tokens / day
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <span className="h-[3px] w-4 rounded-full bg-emerald-500/80" /> completions
+        </span>
+      </div>
     </section>
   );
+}
+
+interface UsageRow {
+  key: string;
+  label: string;
+  sublabel: string;
+  costCents: number;
+  inputTokens: number;
+  cachedInputTokens: number;
+  outputTokens: number;
 }
 
 function UsageList({
@@ -154,35 +163,32 @@ function UsageList({
 }: {
   title: string;
   empty: string;
-  rows: Array<{
-    key: string;
-    label: string;
-    sublabel: string;
-    costCents: number;
-    inputTokens: number;
-    cachedInputTokens: number;
-    outputTokens: number;
-  }>;
+  rows: UsageRow[];
 }) {
   return (
-    <section className="border border-border bg-card p-5">
-      <h2 className="text-base font-semibold">{title}</h2>
-      <div className="mt-4 divide-y divide-border border border-border">
-        {rows.length === 0 ? (
-          <div className="p-4 text-sm text-muted-foreground">{empty}</div>
-        ) : rows.map((row) => (
-          <div key={row.key} className="grid gap-3 p-3 sm:grid-cols-[1fr_auto] sm:items-center">
-            <div className="min-w-0">
-              <div className="truncate text-sm font-medium">{row.label}</div>
-              <div className="truncate text-xs text-muted-foreground">{row.sublabel}</div>
-            </div>
-            <div className="flex flex-wrap gap-2 text-xs tabular-nums sm:justify-end">
-              <Badge variant="outline">{formatTokens(totalTokens(row))}</Badge>
-              <Badge variant="secondary">{formatCents(row.costCents)}</Badge>
-            </div>
-          </div>
-        ))}
+    <section>
+      <div className="flex items-baseline justify-between gap-3 border-b border-border pb-3">
+        <h2 className="text-sm font-semibold">{title}</h2>
+        <span className="text-xs text-muted-foreground tabular-nums">{rows.length}</span>
       </div>
+      {rows.length === 0 ? (
+        <div className="pt-4 text-sm text-muted-foreground">{empty}</div>
+      ) : (
+        <ul className="divide-y divide-border">
+          {rows.map((row) => (
+            <li key={row.key} className="grid gap-2 py-2.5 sm:grid-cols-[1fr_auto] sm:items-center">
+              <div className="min-w-0">
+                <div className="truncate text-sm font-medium">{row.label}</div>
+                <div className="truncate text-xs text-muted-foreground">{row.sublabel}</div>
+              </div>
+              <div className="flex items-baseline gap-4 text-xs tabular-nums sm:justify-end">
+                <span className="text-muted-foreground">{formatTokens(totalTokens(row))}</span>
+                <span className="font-medium">{formatCents(row.costCents)}</span>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
     </section>
   );
 }
@@ -207,12 +213,12 @@ export function UserProfile() {
   const last7 = data?.stats.find((entry) => entry.key === "last7");
   const displayName = data?.user.name?.trim() || data?.user.email?.split("@")[0] || "User";
 
-  const agentUsageRows = useMemo(
+  const agentUsageRows = useMemo<UsageRow[]>(
     () =>
       (data?.topAgents ?? []).map((row) => ({
         key: row.agentId,
         label: row.agentName ?? row.agentId.slice(0, 8),
-        sublabel: "Issue-linked token usage",
+        sublabel: "Issue-linked usage",
         costCents: row.costCents,
         inputTokens: row.inputTokens,
         cachedInputTokens: row.cachedInputTokens,
@@ -221,7 +227,7 @@ export function UserProfile() {
     [data?.topAgents],
   );
 
-  const providerUsageRows = useMemo(
+  const providerUsageRows = useMemo<UsageRow[]>(
     () =>
       (data?.topProviders ?? []).map((row) => ({
         key: `${row.provider}:${row.biller}:${row.model}`,
@@ -247,123 +253,103 @@ export function UserProfile() {
     return <EmptyState icon={AlertCircle} message="User profile not found for this company." />;
   }
 
+  const allTimeTokens = allTime ? totalTokens(allTime) : 0;
+  const metaParts = [
+    data.user.membershipRole ?? "member",
+    data.user.membershipStatus,
+    `joined ${formatDate(data.user.joinedAt)}`,
+  ];
+
   return (
-    <div className="space-y-6">
-      <section className="border border-border bg-[linear-gradient(180deg,hsl(var(--card))_0%,hsl(var(--background))_100%)]">
-        <div className="grid gap-6 p-5 lg:grid-cols-[minmax(0,1fr)_360px] lg:p-7">
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-start gap-5">
-              <Avatar className="size-20 border border-border" size="lg">
-                {data.user.image ? <AvatarImage src={data.user.image} alt={displayName} /> : null}
-                <AvatarFallback className="text-xl font-semibold">{initials(displayName)}</AvatarFallback>
-              </Avatar>
-              <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-center gap-2">
-                  <h1 className="min-w-0 truncate text-3xl font-semibold tracking-normal">{displayName}</h1>
-                  <Badge variant="outline">@{data.user.slug}</Badge>
-                </div>
-                <div className="mt-2 flex flex-wrap gap-2 text-sm text-muted-foreground">
-                  {data.user.email ? <span className="truncate">{data.user.email}</span> : null}
-                  <span>{data.user.membershipRole ?? "member"}</span>
-                  <span>{data.user.membershipStatus}</span>
-                  <span>joined {formatDate(data.user.joinedAt)}</span>
-                </div>
-              </div>
+    <div className="space-y-10 pb-10">
+      <section className="flex flex-col gap-7 border-b border-border pb-8">
+        <div className="flex flex-wrap items-center gap-5">
+          <Avatar className="size-16 border border-border" size="lg">
+            {data.user.image ? <AvatarImage src={data.user.image} alt={displayName} /> : null}
+            <AvatarFallback className="text-lg font-semibold">{initials(displayName)}</AvatarFallback>
+          </Avatar>
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+              <h1 className="truncate text-2xl font-semibold">{displayName}</h1>
+              <span className="text-sm text-muted-foreground">@{data.user.slug}</span>
             </div>
-
-            <div className="mt-7 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-              <StatPill icon={Coins} label="All-time tokens" value={formatTokens(allTime ? totalTokens(allTime) : 0)} tone="blue" />
-              <StatPill icon={CheckCircle2} label="Completed" value={String(allTime?.completedIssues ?? 0)} tone="green" />
-              <StatPill icon={Clock3} label="Open assigned" value={String(allTime?.assignedOpenIssues ?? 0)} tone="amber" />
-              <StatPill icon={Activity} label="7-day actions" value={String(last7?.activityCount ?? 0)} />
-            </div>
-          </div>
-
-          <div className="border border-border bg-background p-4">
-            <div className="flex items-center gap-2 text-sm font-semibold">
-              <Hash className="size-4 text-muted-foreground" />
-              Profile ledger
-            </div>
-            <div className="mt-4 space-y-3 text-sm">
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-muted-foreground">All-time spend</span>
-                <span className="font-semibold tabular-nums">{formatCents(allTime?.costCents ?? 0)}</span>
-              </div>
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-muted-foreground">Attributed cost events</span>
-                <span className="font-semibold tabular-nums">{allTime?.costEventCount ?? 0}</span>
-              </div>
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-muted-foreground">Comments</span>
-                <span className="font-semibold tabular-nums">{allTime?.commentCount ?? 0}</span>
-              </div>
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-muted-foreground">Completion rate</span>
-                <span className="font-semibold tabular-nums">{allTime ? completionRate(allTime) : "0%"}</span>
-              </div>
+            <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
+              {data.user.email ? <span className="truncate">{data.user.email}</span> : null}
+              {data.user.email ? <span aria-hidden>·</span> : null}
+              <span>{metaParts.join(" · ")}</span>
             </div>
           </div>
         </div>
+
+        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+          <HeroStat label="All-time tokens" value={formatTokens(allTimeTokens)} hint={formatCents(allTime?.costCents ?? 0) + " spent"} />
+          <HeroStat label="Completed" value={String(allTime?.completedIssues ?? 0)} hint={allTime ? `${completionRate(allTime)} rate` : undefined} />
+          <HeroStat label="Open assigned" value={String(allTime?.assignedOpenIssues ?? 0)} hint={`${allTime?.createdIssues ?? 0} created`} />
+          <HeroStat label="7-day actions" value={String(last7?.activityCount ?? 0)} hint={`${last7?.commentCount ?? 0} comments`} />
+        </div>
       </section>
 
-      <div className="grid gap-4 xl:grid-cols-3">
-        {data.stats.map((entry) => <WindowPanel key={entry.key} stats={entry} />)}
-      </div>
+      <section className="grid gap-8 border-b border-border pb-8 lg:grid-cols-3">
+        {data.stats.map((entry) => <WindowColumn key={entry.key} stats={entry} />)}
+      </section>
 
       <UsageChart points={data.daily} />
 
-      <div className="grid gap-6 xl:grid-cols-2">
-        <section className="border border-border bg-card p-5">
-          <div className="flex items-center justify-between gap-3">
-            <h2 className="text-base font-semibold">Recent tasks</h2>
-            <Badge variant="outline">{data.recentIssues.length}</Badge>
+      <div className="grid gap-10 pt-2 xl:grid-cols-2">
+        <section>
+          <div className="flex items-baseline justify-between gap-3 border-b border-border pb-3">
+            <h2 className="text-sm font-semibold">Recent tasks</h2>
+            <span className="text-xs text-muted-foreground tabular-nums">{data.recentIssues.length}</span>
           </div>
-          <div className="mt-4 divide-y divide-border border border-border">
-            {data.recentIssues.length === 0 ? (
-              <div className="p-4 text-sm text-muted-foreground">No touched tasks yet.</div>
-            ) : data.recentIssues.map((issue) => (
-              <Link
-                key={issue.id}
-                to={issueUrl(issue)}
-                className="grid gap-2 p-3 transition-colors hover:bg-accent/50 sm:grid-cols-[1fr_auto] sm:items-center"
-              >
-                <div className="min-w-0">
-                  <div className="truncate text-sm font-medium">{issue.identifier ?? issue.id.slice(0, 8)}</div>
-                  <div className="truncate text-xs text-muted-foreground">{issue.title}</div>
-                </div>
-                <div className="flex flex-wrap items-center gap-2 sm:justify-end">
-                  <StatusBadge status={issue.status} />
-                  <span className="text-xs text-muted-foreground">{relativeTime(issue.updatedAt)}</span>
-                </div>
-              </Link>
-            ))}
-          </div>
+          {data.recentIssues.length === 0 ? (
+            <div className="pt-4 text-sm text-muted-foreground">No touched tasks yet.</div>
+          ) : (
+            <ul className="divide-y divide-border">
+              {data.recentIssues.map((issue) => (
+                <li key={issue.id}>
+                  <Link
+                    to={issueUrl(issue)}
+                    className="grid gap-2 py-2.5 transition-colors hover:bg-accent/40 sm:grid-cols-[auto_1fr_auto] sm:items-center"
+                  >
+                    <span className="font-mono text-xs text-muted-foreground">{issue.identifier ?? issue.id.slice(0, 8)}</span>
+                    <span className="truncate text-sm">{issue.title}</span>
+                    <span className="flex items-center gap-3 sm:justify-end">
+                      <StatusBadge status={issue.status} />
+                      <span className="text-xs tabular-nums text-muted-foreground">{relativeTime(issue.updatedAt)}</span>
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
         </section>
 
-        <section className="border border-border bg-card p-5">
-          <div className="flex items-center justify-between gap-3">
-            <h2 className="text-base font-semibold">Recent activity</h2>
-            <Badge variant="outline">{data.recentActivity.length}</Badge>
+        <section>
+          <div className="flex items-baseline justify-between gap-3 border-b border-border pb-3">
+            <h2 className="text-sm font-semibold">Recent activity</h2>
+            <span className="text-xs text-muted-foreground tabular-nums">{data.recentActivity.length}</span>
           </div>
-          <div className="mt-4 divide-y divide-border border border-border">
-            {data.recentActivity.length === 0 ? (
-              <div className="p-4 text-sm text-muted-foreground">No direct user actions recorded yet.</div>
-            ) : data.recentActivity.map((event) => (
-              <div key={event.id} className="grid gap-2 p-3 sm:grid-cols-[1fr_auto] sm:items-center">
-                <div className="min-w-0">
-                  <div className="truncate text-sm font-medium">{event.action.replaceAll("_", " ")}</div>
-                  <div className="truncate text-xs text-muted-foreground">
-                    {event.entityType} - {event.entityId.slice(0, 12)}
+          {data.recentActivity.length === 0 ? (
+            <div className="pt-4 text-sm text-muted-foreground">No direct user actions recorded yet.</div>
+          ) : (
+            <ul className="divide-y divide-border">
+              {data.recentActivity.map((event) => (
+                <li key={event.id} className="grid gap-2 py-2.5 sm:grid-cols-[1fr_auto] sm:items-center">
+                  <div className="min-w-0">
+                    <div className="truncate text-sm">{event.action.replaceAll("_", " ")}</div>
+                    <div className="truncate text-xs text-muted-foreground">
+                      {event.entityType} · {event.entityId.slice(0, 12)}
+                    </div>
                   </div>
-                </div>
-                <div className="text-xs text-muted-foreground">{relativeTime(event.createdAt)}</div>
-              </div>
-            ))}
-          </div>
+                  <span className="text-xs tabular-nums text-muted-foreground sm:justify-self-end">{relativeTime(event.createdAt)}</span>
+                </li>
+              ))}
+            </ul>
+          )}
         </section>
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-2">
+      <div className="grid gap-10 xl:grid-cols-2">
         <UsageList title="Agent attribution" empty="No issue-linked token usage yet." rows={agentUsageRows} />
         <UsageList title="Provider mix" empty="No provider usage attributed yet." rows={providerUsageRows} />
       </div>
