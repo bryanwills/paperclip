@@ -1,6 +1,16 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
-import { agents, companies, createDb, heartbeatRuns, issueComments, issues } from "@paperclipai/db";
+import {
+  agents,
+  companies,
+  createDb,
+  documentRevisions,
+  documents,
+  heartbeatRuns,
+  issueComments,
+  issueDocuments,
+  issues,
+} from "@paperclipai/db";
 import {
   getEmbeddedPostgresTestSupport,
   startEmbeddedPostgresTestDatabase,
@@ -27,6 +37,9 @@ describeEmbeddedPostgres("activity service", () => {
 
   afterEach(async () => {
     await db.delete(issueComments);
+    await db.delete(issueDocuments);
+    await db.delete(documentRevisions);
+    await db.delete(documents);
     await db.delete(issues);
     await db.delete(heartbeatRuns);
     await db.delete(agents);
@@ -216,6 +229,125 @@ describeEmbeddedPostgres("activity service", () => {
       livenessReason: "Issue is done",
       continuationAttempt: 0,
       lastUsefulActionAt: completedAt,
+    });
+  });
+
+  it("does not backfill document evidence from a different run", async () => {
+    const companyId = randomUUID();
+    const agentId = randomUUID();
+    const issueId = randomUUID();
+    const runId = randomUUID();
+    const otherRunId = randomUUID();
+    const documentId = randomUUID();
+    const revisionId = randomUUID();
+    const createdAt = new Date("2026-04-18T20:08:00.000Z");
+
+    await db.insert(companies).values({
+      id: companyId,
+      name: "Paperclip",
+      issuePrefix: `T${companyId.replace(/-/g, "").slice(0, 6).toUpperCase()}`,
+      requireBoardApprovalForNewAgents: false,
+    });
+
+    await db.insert(agents).values({
+      id: agentId,
+      companyId,
+      name: "CodexCoder",
+      role: "engineer",
+      status: "idle",
+      adapterType: "codex_local",
+      adapterConfig: {},
+      runtimeConfig: {},
+      permissions: {},
+    });
+
+    await db.insert(issues).values({
+      id: issueId,
+      companyId,
+      title: "Fix run ledger",
+      description: "Make the run ledger answer whether a run advanced.",
+      status: "in_progress",
+      priority: "medium",
+      assigneeAgentId: agentId,
+    });
+
+    await db.insert(heartbeatRuns).values([
+      {
+        id: runId,
+        companyId,
+        agentId,
+        invocationSource: "assignment",
+        status: "succeeded",
+        startedAt: new Date("2026-04-18T20:00:00.000Z"),
+        finishedAt: new Date("2026-04-18T20:02:00.000Z"),
+        contextSnapshot: { issueId },
+        resultJson: {
+          summary: "Next steps:\n- inspect files",
+        },
+        livenessState: null,
+        livenessReason: null,
+      },
+      {
+        id: otherRunId,
+        companyId,
+        agentId,
+        invocationSource: "assignment",
+        status: "succeeded",
+        startedAt: new Date("2026-04-18T20:05:00.000Z"),
+        finishedAt: createdAt,
+        contextSnapshot: { issueId },
+        resultJson: {
+          summary: "Updated the plan document.",
+        },
+        livenessState: "advanced",
+        livenessReason: "Run produced concrete action evidence: 1 document revision(s)",
+      },
+    ]);
+
+    await db.insert(documents).values({
+      id: documentId,
+      companyId,
+      title: "Plan",
+      format: "markdown",
+      latestBody: "# Plan\n\n- Inspect files",
+      latestRevisionId: revisionId,
+      latestRevisionNumber: 1,
+      createdByAgentId: agentId,
+      updatedByAgentId: agentId,
+      createdAt,
+      updatedAt: createdAt,
+    });
+
+    await db.insert(documentRevisions).values({
+      id: revisionId,
+      companyId,
+      documentId,
+      revisionNumber: 1,
+      title: "Plan",
+      format: "markdown",
+      body: "# Plan\n\n- Inspect files",
+      createdByAgentId: agentId,
+      createdByRunId: otherRunId,
+      createdAt,
+    });
+
+    await db.insert(issueDocuments).values({
+      companyId,
+      issueId,
+      documentId,
+      key: "plan",
+      createdAt,
+      updatedAt: createdAt,
+    });
+
+    const runs = await activityService(db).runsForIssue(companyId, issueId);
+    const backfilledRun = runs.find((run) => run.runId === runId);
+
+    expect(backfilledRun).toMatchObject({
+      runId,
+      livenessState: "plan_only",
+      livenessReason: "Run described future work without concrete action evidence",
+      lastUsefulActionAt: null,
     });
   });
 });

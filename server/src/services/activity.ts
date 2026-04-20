@@ -3,6 +3,7 @@ import type { Db } from "@paperclipai/db";
 import {
   activityLog,
   agents,
+  documentRevisions,
   heartbeatRunEvents,
   heartbeatRuns,
   issueComments,
@@ -202,10 +203,18 @@ export function activityService(db: Db) {
         .select({
           count: sql<number>`count(*)::int`,
           planCount: sql<number>`count(*) filter (where ${issueDocuments.key} = 'plan')::int`,
-          latestAt: sql<Date | null>`max(${issueDocuments.updatedAt})`,
+          latestAt: sql<Date | null>`max(${documentRevisions.createdAt})`,
         })
-        .from(issueDocuments)
-        .where(and(eq(issueDocuments.companyId, companyId), eq(issueDocuments.issueId, issueId)));
+        .from(documentRevisions)
+        .innerJoin(issueDocuments, eq(documentRevisions.documentId, issueDocuments.documentId))
+        .where(
+          and(
+            eq(documentRevisions.companyId, companyId),
+            eq(documentRevisions.createdByRunId, run.id),
+            eq(issueDocuments.companyId, companyId),
+            eq(issueDocuments.issueId, issueId),
+          ),
+        );
 
       const [workProductStats] = await db
         .select({
