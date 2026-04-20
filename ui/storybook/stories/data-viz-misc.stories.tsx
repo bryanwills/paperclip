@@ -129,7 +129,6 @@ function makeHeartbeatRun(overrides: Partial<HeartbeatRun>): HeartbeatRun {
     lastUsefulActionAt: null,
     nextAction: null,
     contextSnapshot: null,
-    updatedAt: createdAt,
     ...overrides,
     createdAt,
     updatedAt: overrides.updatedAt ?? createdAt,
