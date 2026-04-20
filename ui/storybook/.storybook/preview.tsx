@@ -11,32 +11,20 @@ import { SidebarProvider } from "@/context/SidebarContext";
 import { ThemeProvider } from "@/context/ThemeContext";
 import { ToastProvider } from "@/context/ToastContext";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import {
+  storybookAgents,
+  storybookApprovals,
+  storybookAuthSession,
+  storybookCompanies,
+  storybookDashboardSummary,
+  storybookIssues,
+  storybookLiveRuns,
+  storybookProjects,
+  storybookSidebarBadges,
+} from "../fixtures/paperclipData";
 import "@mdxeditor/editor/style.css";
 import "@/index.css";
 import "./styles.css";
-
-const storybookCompany = {
-  id: "company-storybook",
-  name: "Paperclip Storybook",
-  description: "Fixture company for isolated UI review.",
-  status: "active",
-  pauseReason: null,
-  pausedAt: null,
-  issuePrefix: "PAP",
-  issueCounter: 1641,
-  budgetMonthlyCents: 250_000,
-  spentMonthlyCents: 67_500,
-  requireBoardApprovalForNewAgents: true,
-  feedbackDataSharingEnabled: true,
-  feedbackDataSharingConsentAt: null,
-  feedbackDataSharingConsentByUserId: null,
-  feedbackDataSharingTermsVersion: null,
-  brandColor: "#0f766e",
-  logoAssetId: null,
-  logoUrl: null,
-  createdAt: new Date("2026-04-01T09:00:00.000Z"),
-  updatedAt: new Date("2026-04-20T12:00:00.000Z"),
-};
 
 function installStorybookApiFixtures() {
   if (typeof window === "undefined") return;
@@ -57,8 +45,100 @@ function installStorybookApiFixtures() {
           : input.url;
     const url = new URL(rawUrl, window.location.origin);
 
+    if (url.pathname === "/api/auth/get-session") {
+      return Response.json(storybookAuthSession);
+    }
+
     if (url.pathname === "/api/companies") {
-      return Response.json([storybookCompany]);
+      return Response.json(storybookCompanies);
+    }
+
+    if (url.pathname === "/api/companies/company-storybook/user-directory") {
+      return Response.json({
+        users: [
+          {
+            principalId: "user-board",
+            status: "active",
+            user: {
+              id: "user-board",
+              email: "board@paperclip.local",
+              name: "Board Operator",
+              image: null,
+            },
+          },
+          {
+            principalId: "user-product",
+            status: "active",
+            user: {
+              id: "user-product",
+              email: "product@paperclip.local",
+              name: "Product Lead",
+              image: null,
+            },
+          },
+        ],
+      });
+    }
+
+    if (url.pathname === "/api/instance/settings/experimental") {
+      return Response.json({
+        enableIsolatedWorkspaces: true,
+        autoRestartDevServerWhenIdle: false,
+      });
+    }
+
+    if (url.pathname === "/api/plugins/ui-contributions") {
+      return Response.json([]);
+    }
+
+    const companyResourceMatch = url.pathname.match(/^\/api\/companies\/([^/]+)\/([^/]+)$/);
+    if (companyResourceMatch) {
+      const [, companyId, resource] = companyResourceMatch;
+      if (resource === "agents") {
+        return Response.json(companyId === "company-storybook" ? storybookAgents : []);
+      }
+      if (resource === "projects") {
+        return Response.json(companyId === "company-storybook" ? storybookProjects : []);
+      }
+      if (resource === "approvals") {
+        return Response.json(companyId === "company-storybook" ? storybookApprovals : []);
+      }
+      if (resource === "dashboard") {
+        return Response.json({
+          ...storybookDashboardSummary,
+          companyId,
+        });
+      }
+      if (resource === "heartbeat-runs") {
+        return Response.json([]);
+      }
+      if (resource === "live-runs") {
+        return Response.json(companyId === "company-storybook" ? storybookLiveRuns : []);
+      }
+      if (resource === "inbox-dismissals") {
+        return Response.json([]);
+      }
+      if (resource === "sidebar-badges") {
+        return Response.json(
+          companyId === "company-storybook"
+            ? storybookSidebarBadges
+            : { inbox: 0, approvals: 0, failedRuns: 0, joinRequests: 0 },
+        );
+      }
+      if (resource === "join-requests") {
+        return Response.json([]);
+      }
+      if (resource === "issues") {
+        const query = url.searchParams.get("q")?.trim().toLowerCase();
+        const issues = companyId === "company-storybook" ? storybookIssues : [];
+        return Response.json(
+          query
+            ? issues.filter((issue) =>
+                `${issue.identifier ?? ""} ${issue.title} ${issue.description ?? ""}`.toLowerCase().includes(query),
+              )
+            : issues,
+        );
+      }
     }
 
     if (url.pathname.startsWith("/api/invites/") && url.pathname.endsWith("/logo")) {
