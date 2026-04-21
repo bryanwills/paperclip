@@ -58,6 +58,7 @@ type ResolvedInteractionResult = {
 };
 
 type IssueThreadInteractionRow = typeof issueThreadInteractions.$inferSelect;
+type IssueTouchDb = Pick<Db, "update">;
 
 type IssueResolutionContext = {
   id: string;
@@ -130,7 +131,7 @@ function hydrateInteraction(
   }
 }
 
-async function touchIssue(db: Db | any, issueId: string) {
+async function touchIssue(db: IssueTouchDb, issueId: string) {
   await db
     .update(issues)
     .set({ updatedAt: new Date() })
@@ -922,15 +923,8 @@ export function issueThreadInteractionService(db: Db) {
       interactionId: string,
       input: RejectIssueThreadInteraction,
       actor: InteractionActor,
-      currentRow?: IssueThreadInteractionRow,
+      current: IssueThreadInteractionRow,
     ) => {
-      const current = currentRow ?? await db
-        .select()
-        .from(issueThreadInteractions)
-        .where(eq(issueThreadInteractions.id, interactionId))
-        .then((rows) => rows[0] ?? null);
-
-      if (!current) throw notFound("Interaction not found");
       if (current.companyId !== issue.companyId || current.issueId !== issue.id) {
         throw notFound("Interaction not found");
       }
