@@ -20,6 +20,7 @@ import {
   useRef,
   useState,
   type ChangeEvent,
+  type DragEvent as ReactDragEvent,
   type ErrorInfo,
   type Ref,
   type ReactNode,
@@ -505,6 +506,11 @@ function IssueChatFallbackThread({
 
 const DRAFT_DEBOUNCE_MS = 800;
 const COMPOSER_FOCUS_SCROLL_PADDING_PX = 96;
+const SUBMIT_SCROLL_RESERVE_VH = 0.4;
+
+function hasFilePayload(evt: ReactDragEvent<HTMLDivElement>) {
+  return Array.from(evt.dataTransfer?.types ?? []).includes("Files");
+}
 
 function toIsoString(value: string | Date | null | undefined): string | null {
   if (!value) return null;
@@ -1921,12 +1927,15 @@ const IssueChatComposer = forwardRef<IssueChatComposerHandle, IssueChatComposerP
   const [body, setBody] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [attaching, setAttaching] = useState(false);
+  const [isDragOver, setIsDragOver] = useState(false);
+  const dragDepthRef = useRef(0);
   const effectiveSuggestedAssigneeValue = suggestedAssigneeValue ?? currentAssigneeValue;
   const [reassignTarget, setReassignTarget] = useState(effectiveSuggestedAssigneeValue);
   const attachInputRef = useRef<HTMLInputElement | null>(null);
   const editorRef = useRef<MarkdownEditorRef>(null);
   const composerContainerRef = useRef<HTMLDivElement | null>(null);
   const draftTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const canAcceptFiles = Boolean(onImageUpload || onAttachImage);
 
   function queueViewportRestore(snapshot: ReturnType<typeof captureComposerViewportSnapshot>) {
     if (!snapshot) return;
@@ -2026,23 +2035,44 @@ const IssueChatComposer = forwardRef<IssueChatComposerHandle, IssueChatComposerP
     }
   }
 
+  async function attachFile(file: File) {
+    if (onImageUpload && file.type.startsWith("image/")) {
+      const url = await onImageUpload(file);
+      const safeName = file.name.replace(/[[\]]/g, "\\$&");
+      const markdown = `![${safeName}](${url})`;
+      setBody((prev) => prev ? `${prev}\n\n${markdown}` : markdown);
+    } else if (onAttachImage) {
+      await onAttachImage(file);
+    }
+  }
+
   async function handleAttachFile(evt: ChangeEvent<HTMLInputElement>) {
     const file = evt.target.files?.[0];
     if (!file) return;
     setAttaching(true);
     try {
-      if (onImageUpload) {
-        const url = await onImageUpload(file);
-        const safeName = file.name.replace(/[[\]]/g, "\\$&");
-        const markdown = `![${safeName}](${url})`;
-        setBody((prev) => prev ? `${prev}\n\n${markdown}` : markdown);
-      } else if (onAttachImage) {
-        await onAttachImage(file);
-      }
+      await attachFile(file);
     } finally {
       setAttaching(false);
       if (attachInputRef.current) attachInputRef.current.value = "";
     }
+  }
+
+  async function handleDroppedFiles(files: FileList | null | undefined) {
+    if (!files || files.length === 0) return;
+    setAttaching(true);
+    try {
+      for (const file of Array.from(files)) {
+        await attachFile(file);
+      }
+    } finally {
+      setAttaching(false);
+    }
+  }
+
+  function resetDragState() {
+    dragDepthRef.current = 0;
+    setIsDragOver(false);
   }
 
   const canSubmit = !submitting && !!body.trim();
@@ -2059,7 +2089,32 @@ const IssueChatComposer = forwardRef<IssueChatComposerHandle, IssueChatComposerP
     <div
       ref={composerContainerRef}
       data-testid="issue-chat-composer"
-      className="space-y-3 pt-4 pb-[calc(env(safe-area-inset-bottom)+1.5rem)]"
+      className={cn(
+        "relative rounded-md border border-border/70 bg-background/95 p-[15px] shadow-[0_-12px_28px_rgba(15,23,42,0.08)] backdrop-blur supports-[backdrop-filter]:bg-background/85 dark:shadow-[0_-12px_28px_rgba(0,0,0,0.28)]",
+        isDragOver && "ring-2 ring-primary/60 bg-accent/10",
+      )}
+      onDragEnter={(evt) => {
+        if (!canAcceptFiles || !hasFilePayload(evt)) return;
+        dragDepthRef.current += 1;
+        setIsDragOver(true);
+      }}
+      onDragOver={(evt) => {
+        if (!canAcceptFiles || !hasFilePayload(evt)) return;
+        evt.preventDefault();
+        evt.dataTransfer.dropEffect = "copy";
+      }}
+      onDragLeave={() => {
+        if (!canAcceptFiles) return;
+        dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
+        if (dragDepthRef.current === 0) setIsDragOver(false);
+      }}
+      onDrop={(evt) => {
+        if (!canAcceptFiles) return;
+        resetDragState();
+        if (evt.defaultPrevented) return;
+        evt.preventDefault();
+        void handleDroppedFiles(evt.dataTransfer?.files);
+      }}
     >
       <MarkdownEditor
         ref={editorRef}
@@ -2069,8 +2124,8 @@ const IssueChatComposer = forwardRef<IssueChatComposerHandle, IssueChatComposerP
         mentions={mentions}
         onSubmit={handleSubmit}
         imageUploadHandler={onImageUpload}
-        bordered
-        contentClassName="min-h-[72px] max-h-[28dvh] overflow-y-auto pr-1 text-sm scrollbar-auto-hide"
+        bordered={false}
+        contentClassName="max-h-[28dvh] overflow-y-auto pr-1 text-sm scrollbar-auto-hide"
       />
 
       {composerHint ? (
@@ -2204,6 +2259,11 @@ export function IssueChatThread({
   const composerViewportAnchorRef = useRef<HTMLDivElement | null>(null);
   const composerViewportSnapshotRef = useRef<ReturnType<typeof captureComposerViewportSnapshot>>(null);
   const preserveComposerViewportRef = useRef(false);
+  const pendingSubmitScrollRef = useRef(false);
+  const lastUserMessageIdRef = useRef<string | null>(null);
+  const spacerBaselineAnchorRef = useRef<string | null>(null);
+  const spacerInitialReserveRef = useRef(0);
+  const [bottomSpacerHeight, setBottomSpacerHeight] = useState(0);
   const displayLiveRuns = useMemo(() => {
     const deduped = new Map<string, LiveRunForIssue>();
     for (const run of liveRuns) {
@@ -2317,9 +2377,57 @@ export function IssueChatThread({
   const runtime = usePaperclipIssueRuntime({
     messages,
     isRunning,
-    onSend: ({ body, reopen, reassignment }) => onAdd(body, reopen, reassignment),
+    onSend: ({ body, reopen, reassignment }) => {
+      pendingSubmitScrollRef.current = true;
+      return onAdd(body, reopen, reassignment);
+    },
     onCancel: onCancelRun,
   });
+
+  useEffect(() => {
+    const lastUserMessage = [...messages].reverse().find((m) => m.role === "user");
+    const lastUserId = lastUserMessage?.id ?? null;
+
+    if (
+      pendingSubmitScrollRef.current
+      && lastUserId
+      && lastUserId !== lastUserMessageIdRef.current
+    ) {
+      pendingSubmitScrollRef.current = false;
+      const custom = lastUserMessage?.metadata.custom as { anchorId?: unknown } | undefined;
+      const anchorId = typeof custom?.anchorId === "string" ? custom.anchorId : null;
+      if (anchorId) {
+        const reserve = Math.round(window.innerHeight * SUBMIT_SCROLL_RESERVE_VH);
+        spacerBaselineAnchorRef.current = anchorId;
+        spacerInitialReserveRef.current = reserve;
+        setBottomSpacerHeight(reserve);
+        requestAnimationFrame(() => {
+          const el = document.getElementById(anchorId);
+          el?.scrollIntoView({ behavior: "smooth", block: "start" });
+        });
+      }
+    }
+
+    lastUserMessageIdRef.current = lastUserId;
+  }, [messages]);
+
+  useLayoutEffect(() => {
+    const anchorId = spacerBaselineAnchorRef.current;
+    if (!anchorId || spacerInitialReserveRef.current <= 0) return;
+    const userEl = document.getElementById(anchorId);
+    const bottomEl = bottomAnchorRef.current;
+    if (!userEl || !bottomEl) return;
+    const contentBelow = Math.max(
+      0,
+      bottomEl.getBoundingClientRect().top - userEl.getBoundingClientRect().bottom,
+    );
+    const next = Math.max(0, spacerInitialReserveRef.current - contentBelow);
+    setBottomSpacerHeight((prev) => (prev === next ? prev : next));
+    if (next === 0) {
+      spacerBaselineAnchorRef.current = null;
+      spacerInitialReserveRef.current = 0;
+    }
+  }, [messages]);
 
   useLayoutEffect(() => {
     const composerElement = composerViewportAnchorRef.current;
@@ -2460,12 +2568,23 @@ export function IssueChatThread({
                 })
               )}
               <div ref={bottomAnchorRef} />
+              {showComposer ? (
+                <div
+                  aria-hidden
+                  data-testid="issue-chat-bottom-spacer"
+                  style={{ height: bottomSpacerHeight }}
+                />
+              ) : null}
             </div>
           </div>
         </IssueChatErrorBoundary>
 
         {showComposer ? (
-          <div ref={composerViewportAnchorRef}>
+          <div
+            ref={composerViewportAnchorRef}
+            data-testid="issue-chat-composer-dock"
+            className="sticky bottom-[calc(env(safe-area-inset-bottom)+20px)] z-20 space-y-2 bg-gradient-to-t from-background via-background/95 to-background/0 pt-6"
+          >
             <IssueBlockedNotice issueStatus={issueStatus} blockers={unresolvedBlockers} />
             <IssueAssigneePausedNotice agent={assignedAgent} />
             <IssueChatComposer
