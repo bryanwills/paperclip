@@ -1306,8 +1306,22 @@ function AgentOverview({
       .slice(-7);
   }, [runs]);
 
-  const statusDotClass = agentStatusDot[agent.status] ?? agentStatusDotDefault;
-  const statusLabel = agentStatusLabels[agent.status] ?? agent.status;
+  // agent.status can lag behind run state; derive running-ness from runs to match the live-run card.
+  const hasLiveRun = useMemo(
+    () => runs.some((r) => r.status === "running" || r.status === "queued"),
+    [runs],
+  );
+  const activityStatus = useMemo(() => {
+    if (agent.status === "paused") return "paused";
+    if (agent.status === "pending_approval") return "pending_approval";
+    if (agent.status === "terminated") return "terminated";
+    if (hasLiveRun) return "running";
+    if (agent.status === "error") return "error";
+    return "idle";
+  }, [agent.status, hasLiveRun]);
+
+  const statusDotClass = agentStatusDot[activityStatus] ?? agentStatusDotDefault;
+  const statusLabel = agentStatusLabels[activityStatus] ?? activityStatus;
 
   return (
     <div className="space-y-8">
@@ -1355,6 +1369,13 @@ function AgentOverview({
               </div>
               <div className="text-xs text-muted-foreground tabular-nums">
                 {formatCents(budgetSummary.remainingAmount)} remaining
+                {budgetSummary.policyId ? (() => {
+                  const msUntil = new Date(budgetSummary.windowEnd).getTime() - Date.now();
+                  if (msUntil <= 0) return null;
+                  const days = Math.ceil(msUntil / 86_400_000);
+                  const label = days === 1 ? "resets tomorrow" : `resets in ${days} days`;
+                  return <span> · {label}</span>;
+                })() : null}
               </div>
             </div>
           ) : (
