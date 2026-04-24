@@ -589,6 +589,24 @@ describe("environment routes", () => {
     });
   });
 
+  it("rejects environment lease listing for board users without environments:manage", async () => {
+    const environment = createEnvironment();
+    mockEnvironmentService.getById.mockResolvedValue(environment);
+    mockAccessService.canUser.mockResolvedValue(false);
+    const app = createApp({
+      type: "board",
+      userId: "user-1",
+      source: "dashboard_session",
+      companyIds: ["company-1"],
+    });
+
+    const res = await request(app).get(`/api/environments/${environment.id}/leases`);
+
+    expect(res.status).toBe(403);
+    expect(res.body.error).toContain("environments:manage");
+    expect(mockEnvironmentService.listLeases).not.toHaveBeenCalled();
+  });
+
   it("returns a single lease after company access is confirmed", async () => {
     mockEnvironmentService.getLeaseById.mockResolvedValue({
       id: "lease-1",
@@ -622,6 +640,42 @@ describe("environment routes", () => {
     expect(res.status).toBe(200);
     expect(res.body.provider).toBe("ssh");
     expect(mockEnvironmentService.getLeaseById).toHaveBeenCalledWith("lease-1");
+  });
+
+  it("rejects single-lease reads for board users without environments:manage", async () => {
+    mockEnvironmentService.getLeaseById.mockResolvedValue({
+      id: "lease-1",
+      companyId: "company-1",
+      environmentId: "env-1",
+      executionWorkspaceId: "workspace-1",
+      issueId: null,
+      heartbeatRunId: "run-1",
+      status: "active",
+      leasePolicy: "ephemeral",
+      provider: "ssh",
+      providerLeaseId: "ssh://ssh-user@example.test:22/workspace",
+      acquiredAt: new Date("2026-04-16T05:00:00.000Z"),
+      lastUsedAt: new Date("2026-04-16T05:05:00.000Z"),
+      expiresAt: null,
+      releasedAt: null,
+      failureReason: null,
+      cleanupStatus: null,
+      metadata: { remoteCwd: "/workspace" },
+      createdAt: new Date("2026-04-16T05:00:00.000Z"),
+      updatedAt: new Date("2026-04-16T05:05:00.000Z"),
+    });
+    mockAccessService.canUser.mockResolvedValue(false);
+    const app = createApp({
+      type: "board",
+      userId: "user-1",
+      source: "dashboard_session",
+      companyIds: ["company-1"],
+    });
+
+    const res = await request(app).get("/api/environment-leases/lease-1");
+
+    expect(res.status).toBe(403);
+    expect(res.body.error).toContain("environments:manage");
   });
 
   it("rejects cross-company agent access", async () => {
@@ -932,7 +986,7 @@ describe("environment routes", () => {
     );
   });
 
-  it("deletes the stored SSH private-key secret before removing the environment", async () => {
+  it("deletes the stored SSH private-key secret after removing the environment", async () => {
     const environment = {
       ...createEnvironment(),
       name: "SSH Fixture",
@@ -963,7 +1017,11 @@ describe("environment routes", () => {
     const res = await request(app).delete(`/api/environments/${environment.id}`);
 
     expect(res.status).toBe(200);
+    expect(mockEnvironmentService.remove).toHaveBeenCalledWith(environment.id);
     expect(mockSecretService.remove).toHaveBeenCalledWith("11111111-1111-4111-8111-111111111111");
+    expect(mockEnvironmentService.remove.mock.invocationCallOrder[0]).toBeLessThan(
+      mockSecretService.remove.mock.invocationCallOrder[0],
+    );
     expect(mockExecutionWorkspaceService.clearEnvironmentSelection).toHaveBeenCalledWith(
       environment.companyId,
       environment.id,
@@ -976,7 +1034,6 @@ describe("environment routes", () => {
       environment.companyId,
       environment.id,
     );
-    expect(mockEnvironmentService.remove).toHaveBeenCalledWith(environment.id);
   });
 
   it("returns 404 when deleting a missing environment", async () => {

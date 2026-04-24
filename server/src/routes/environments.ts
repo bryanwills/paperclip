@@ -220,6 +220,10 @@ export function environmentRoutes(db: Db) {
       return;
     }
     assertCompanyAccess(req, environment.companyId);
+    const canReadConfigs = await actorCanReadEnvironmentConfigurations(req, environment.companyId);
+    if (!canReadConfigs) {
+      throw forbidden("Missing permission: environments:manage");
+    }
     const leases = await svc.listLeases(environment.id, {
       status: req.query.status as string | undefined,
     });
@@ -233,6 +237,10 @@ export function environmentRoutes(db: Db) {
       return;
     }
     assertCompanyAccess(req, lease.companyId);
+    const canReadConfigs = await actorCanReadEnvironmentConfigurations(req, lease.companyId);
+    if (!canReadConfigs) {
+      throw forbidden("Missing permission: environments:manage");
+    }
     res.json(lease);
   });
 
@@ -301,15 +309,6 @@ export function environmentRoutes(db: Db) {
       return;
     }
     await assertCanMutateEnvironments(req, existing.companyId);
-    if (existing.driver === "ssh") {
-      const parsed = parseEnvironmentDriverConfig(existing);
-      if (parsed.driver === "ssh") {
-        const secretId = parsed.config.privateKeySecretRef?.secretId;
-        if (secretId) {
-          await secrets.remove(secretId);
-        }
-      }
-    }
     await Promise.all([
       executionWorkspaces.clearEnvironmentSelection(existing.companyId, existing.id),
       issues.clearExecutionWorkspaceEnvironmentSelection(existing.companyId, existing.id),
@@ -319,6 +318,15 @@ export function environmentRoutes(db: Db) {
     if (!removed) {
       res.status(404).json({ error: "Environment not found" });
       return;
+    }
+    if (existing.driver === "ssh") {
+      const parsed = parseEnvironmentDriverConfig(existing);
+      if (parsed.driver === "ssh") {
+        const secretId = parsed.config.privateKeySecretRef?.secretId;
+        if (secretId) {
+          await secrets.remove(secretId);
+        }
+      }
     }
     const actor = getActorInfo(req);
     await logActivity(db, {
