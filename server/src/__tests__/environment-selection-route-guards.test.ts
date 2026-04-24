@@ -289,6 +289,55 @@ describe.sequential("execution environment route guards", () => {
     expect(mockProjectService.update).not.toHaveBeenCalled();
   });
 
+  it("rejects archived environments on project create", async () => {
+    mockEnvironmentService.getById.mockResolvedValue({
+      id: sshEnvironmentId,
+      companyId: "company-1",
+      driver: "ssh",
+      status: "archived",
+      config: {},
+    });
+    const app = createProjectApp();
+
+    const res = await request(app)
+      .post("/api/companies/company-1/projects")
+      .send({
+        name: "Archived Project",
+        executionWorkspacePolicy: {
+          enabled: true,
+          environmentId: sshEnvironmentId,
+        },
+      });
+
+    expect(res.status).toBe(422);
+    expect(res.body.error).toBe("Environment is archived.");
+    expect(mockProjectService.create).not.toHaveBeenCalled();
+  });
+
+  it("rejects archived environments on issue create", async () => {
+    mockEnvironmentService.getById.mockResolvedValue({
+      id: sshEnvironmentId,
+      companyId: "company-1",
+      driver: "ssh",
+      status: "archived",
+      config: {},
+    });
+    const app = createIssueApp();
+
+    const res = await request(app)
+      .post("/api/companies/company-1/issues")
+      .send({
+        title: "Archived Issue",
+        executionWorkspaceSettings: {
+          environmentId: sshEnvironmentId,
+        },
+      });
+
+    expect(res.status).toBe(422);
+    expect(res.body.error).toBe("Environment is archived.");
+    expect(mockIssueService.create).not.toHaveBeenCalled();
+  });
+
   it("accepts SSH environments on issue create", async () => {
     mockEnvironmentService.getById.mockResolvedValue({
       id: sshEnvironmentId,

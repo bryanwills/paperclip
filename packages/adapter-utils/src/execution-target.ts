@@ -102,6 +102,9 @@ export function adapterExecutionTargetIsRemote(
 export function adapterExecutionTargetUsesManagedHome(
   target: AdapterExecutionTarget | null | undefined,
 ): boolean {
+  // SSH execution targets sync the runtime assets they need into the remote cwd today,
+  // so neither local nor remote targets provision a separate managed adapter home.
+  void target;
   return false;
 }
 

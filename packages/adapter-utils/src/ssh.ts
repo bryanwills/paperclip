@@ -60,6 +60,10 @@ export function shellQuote(value: string) {
   return `'${value.replace(/'/g, `'\"'\"'`)}'`;
 }
 
+function isValidShellEnvKey(value: string) {
+  return /^[A-Za-z_][A-Za-z0-9_]*$/.test(value);
+}
+
 export function parseSshRemoteExecutionSpec(value: unknown): SshRemoteExecutionSpec | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return null;
@@ -720,6 +724,11 @@ export async function buildSshSpawnTarget(input: {
   args: string[];
   cleanup: () => Promise<void>;
 }> {
+  for (const key of Object.keys(input.env)) {
+    if (!isValidShellEnvKey(key)) {
+      throw new Error(`Invalid SSH environment variable key: ${key}`);
+    }
+  }
   const auth = await createSshAuthArgs(input.spec);
   const sshArgs = [...auth.args];
   const envArgs = Object.entries(input.env)

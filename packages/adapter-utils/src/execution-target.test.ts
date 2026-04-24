@@ -1,6 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import * as ssh from "./ssh.js";
-import { runAdapterExecutionTargetShellCommand } from "./execution-target.js";
+import {
+  adapterExecutionTargetUsesManagedHome,
+  runAdapterExecutionTargetShellCommand,
+} from "./execution-target.js";
 
 describe("runAdapterExecutionTargetShellCommand", () => {
   afterEach(() => {
@@ -135,5 +138,24 @@ describe("runAdapterExecutionTargetShellCommand", () => {
     });
     expect(onLog).toHaveBeenCalledWith("stdout", "partial stdout");
     expect(onLog).toHaveBeenCalledWith("stderr", "partial stderr");
+  });
+
+  it("keeps managed homes disabled for both local and SSH targets", () => {
+    expect(adapterExecutionTargetUsesManagedHome(null)).toBe(false);
+    expect(adapterExecutionTargetUsesManagedHome({
+      kind: "remote",
+      transport: "ssh",
+      remoteCwd: "/srv/paperclip/workspace",
+      spec: {
+        host: "ssh.example.test",
+        port: 22,
+        username: "ssh-user",
+        remoteCwd: "/srv/paperclip/workspace",
+        remoteWorkspacePath: "/srv/paperclip/workspace",
+        privateKey: null,
+        knownHosts: null,
+        strictHostKeyChecking: true,
+      },
+    })).toBe(false);
   });
 });

@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  buildSshSpawnTarget,
   buildSshEnvLabFixtureConfig,
   getSshEnvLabSupport,
   prepareWorkspaceForSshExecution,
@@ -99,6 +100,28 @@ describe("ssh env-lab fixture", () => {
     expect(restarted.pid).not.toBe(process.pid);
 
     await stopSshEnvLabFixture(statePath);
+  });
+
+  it("rejects invalid environment variable keys when constructing SSH spawn targets", async () => {
+    await expect(
+      buildSshSpawnTarget({
+        spec: {
+          host: "ssh.example.test",
+          port: 22,
+          username: "ssh-user",
+          remoteCwd: "/srv/paperclip/workspace",
+          remoteWorkspacePath: "/srv/paperclip/workspace",
+          privateKey: null,
+          knownHosts: null,
+          strictHostKeyChecking: true,
+        },
+        command: "env",
+        args: [],
+        env: {
+          "BAD KEY": "value",
+        },
+      }),
+    ).rejects.toThrow("Invalid SSH environment variable key: BAD KEY");
   });
 
   it("syncs a local directory into the remote fixture workspace", async () => {
